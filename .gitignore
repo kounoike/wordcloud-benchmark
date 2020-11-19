@@ -1,0 +1,6 @@
+.venv/
+.ipynb_checkpoints/
+aozora*.txt
+aozora*.js
+aozora*.json
+data*.js

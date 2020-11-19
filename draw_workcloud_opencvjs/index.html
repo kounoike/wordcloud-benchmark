@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Hello OpenCV.js</title>
+</head>
+
+<body>
+  <h2>Hello OpenCV.js</h2>
+  <div id="status">OpenCV.js is loading...<br /></div>
+  <div>
+    <div class="inputoutput">
+      <canvas id="canvasOutput"></canvas>
+      <div class="caption">canvasOutput</div>
+    </div>
+    <div id="wordImages">
+    </div>
+  </div>
+  <script src="./data.js" type="text/javascript"></script>
+  <script type="text/javascript">
+    let words;
+    var sRois = [];
+    var dRois = [];
+    var wMats = [];
+
+    async function doOpenCvTask() {
+
+      await (async () => new Promise(resolve => setTimeout(resolve, 1000)))();
+      let words = window.words;
+
+      console.log(`${window.jsondata.total_pixel} pixel`);
+      console.log("do decodeImage.");
+      document.getElementById('status').innerHTML += 'do decodeImage<br/>';
+
+      const baseWidth = jsondata.width;
+      const baseHeight = jsondata.height;
+      const baseMat = new cv.Mat(new cv.Size(baseWidth, baseHeight), cv.CV_8UC4);
+      window.baseMat = baseMat;
+
+      const promiseArray = [];
+      const start1 = performance.now();
+      jsondata.words.forEach(word => {
+        const pngb64 = word.pngb64;
+        const p = new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = function () {
+            try {
+              word.img = img;
+              const wMat = cv.imread(word.img);
+              word.wMat = wMat;
+              const pos = word.pos;
+              const wordSize = word.word_size;
+              const imageSize = word.image_size;
+
+              let x0 = pos[0] > 0 ? pos[0] : 0;
+              let x2 = pos[0] > 0 ? 0 : -pos[0];
+              let y0 = pos[1] > 0 ? pos[1] : 0;
+              let y2 = pos[1] > 0 ? 0 : -pos[1];
+              let x1 = pos[0] + imageSize[0] <= baseWidth ? pos[0] + imageSize[0] : baseWidth;
+              let x3 = pos[0] + imageSize[0] <= baseWidth ? imageSize[0] : baseWidth - pos[0];
+              let y1 = pos[1] + imageSize[1] <= baseHeight ? pos[1] + imageSize[1] : baseHeight;
+              let y3 = pos[1] + imageSize[1] <= baseHeight ? imageSize[1] : baseWidth - pos[1];
+              let ww = x1 - x0;
+              let wh = y1 - y0;
+              word.x0 = x0;
+              word.y0 = y0;
+              word.x2 = x2;
+              word.y2 = y2;
+              word.ww = ww;
+              word.wh = wh;
+              let dRect = new cv.Rect(word.x0, word.y0, word.ww, word.wh);
+              let sRect = new cv.Rect(word.x2, word.y2, word.ww, word.wh);
+              let dRoi = baseMat.roi(dRect);
+              let sRoi = word.wMat.roi(sRect);
+              dRois.push(dRoi);
+              sRois.push(sRoi);
+              wMats.push(wMat);
+              resolve();
+            } catch (err) {
+              document.getElementById('status').innerHTML += `error!: ${err}<br/>${err.stack}<br/>`;
+              reject();
+            }
+          }
+          img.src = "data:image/png;base64," + pngb64;
+        });
+        promiseArray.push(p);
+      });
+      await Promise.all(promiseArray)
+      const end1 = performance.now();
+      console.log(end1 - start1, "msec");
+      document.getElementById('status').innerHTML += 'cvmat data is ready.<br/>';
+
+      console.log("do opencv task.")
+      document.getElementById('status').innerHTML += 'do opencv task<br/>';
+      const start2 = performance.now();
+      const num = 100;
+      for (let cnt = 0; cnt < num; ++cnt) {
+        for (let idx = 0; idx < jsondata.words.length; ++idx) {
+          // let word = jsondata.words[idx];
+          let dRoi = dRois[idx];
+          let sRoi = sRois[idx];
+          cv.max(sRoi, dRoi, dRoi);
+        };
+      }
+      const end2 = performance.now();
+      console.log((end2 - start2) / num, "msec");
+      console.log("do delete()");
+      const start3 = performance.now();
+      for (let idx = 0; idx < jsondata.words.length; ++idx) {
+        let dRoi = dRois[idx];
+        let sRoi = sRois[idx];
+        sRoi.delete();
+        dRoi.delete();
+        wMats[idx].delete();
+      };
+      const end3 = performance.now();
+      console.log(end3 - start3, "msec");
+
+      cv.imshow('canvasOutput', baseMat);
+      baseMat.delete();
+      console.log("done wordcloud task.")
+
+      const sMat = new cv.Mat(256, 256, cv.CV_8UC4);
+      const dMat = new cv.Mat();
+      console.log(sMat, dMat);
+      const sz = new cv.Size(960, 540);
+      const start4 = performance.now();
+      for (let idx = 0; idx < num; ++idx) {
+        cv.resize(sMat, dMat, sz);
+      }
+      const end4 = performance.now();
+      console.log((end4 - start4) / num, "msec");
+
+      document.getElementById('status').innerHTML += 'done opencv task<br/>';
+    }
+
+  </script>
+  <script src="./opencv.js" type="text/javascript" onload="doOpenCvTask();"></script>
+</body>
+
+</html>

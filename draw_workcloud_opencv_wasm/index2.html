@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+</head>
+
+<body>
+  <canvas id="canvas" width="1280" height="720"></canvas>
+  <script src="./data.js"></script>
+  <script>
+const init = async () => {
+  const baseWidth = jsondata.width;
+  const baseHeight = jsondata.height;
+
+  const canvas = document.getElementById("canvas");
+  const context = canvas.getContext("2d");
+  const data = context.getImageData(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  const start0 = performance.now();
+  const buffer = Module._malloc(data.data.length);
+  Module.HEAPU8.set(data.data, buffer);
+  Module.setBaseMat(buffer, data.width, data.height);
+  const end0 = performance.now();
+  console.log("step0: ", end0 - start0, "msec");
+
+  const promiseArray = [];
+
+  const start1 = performance.now();
+  for(let idx = 0; idx < jsondata.words.length; ++idx) {
+    const word = jsondata.words[idx];
+    const pngb64 = word.pngb64;
+    const p = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = function() {
+        try{
+          const pos = word.pos;
+          const wordSize = word.word_size;
+          const imageSize = word.image_size;
+
+          const x0 = pos[0] > 0 ? pos[0] : 0;
+          const x2 = pos[0] > 0 ? 0 : -pos[0];
+          const y0 = pos[1] > 0 ? pos[1] : 0;
+          const y2 = pos[1] > 0 ? 0 : -pos[1];
+          const x1 = pos[0] + imageSize[0] <= baseWidth ? pos[0] + imageSize[0] : baseWidth;
+          const x3 = pos[0] + imageSize[0] <= baseWidth ? imageSize[0] : baseWidth - pos[0];
+          const y1 = pos[1] + imageSize[1] <= baseHeight ? pos[1] + imageSize[1] : baseHeight;
+          const y3 = pos[1] + imageSize[1] <= baseHeight ? imageSize[1] : baseWidth - pos[1];
+          const ww = x1 - x0;
+          const wh = y1 - y0;
+          word.x0 = x0;
+          word.y0 = y0;
+          word.x2 = x2;
+          word.y2 = y2;
+          word.ww = ww;
+          word.wh = wh;
+
+          const canvas = new OffscreenCanvas(ww, wh);
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, x2, y2, ww, wh, 0, 0, ww, wh);
+          const data = ctx.getImageData(
+            0,
+            0,
+            ww,
+            wh
+          );
+
+          Module.HEAPU8.set(data.data, buffer);
+          Module.addWordLayout(word.word, x0, y0, ww, wh, buffer);
+          resolve();
+        }catch(err) {
+          console.error(`error!: ${err}<br/>${err.stack}<br/>`);
+          reject();
+        }
+      }
+      img.src = "data:image/png;base64," + pngb64;
+    });
+    promiseArray.push(p);
+  };
+  await Promise.all(promiseArray)
+  const end1 = performance.now();
+  console.log("step1: ", end1 - start1, "msec");
+
+  const start2 = performance.now();
+  Module.doOpenCvTask(data.width, data.height);
+  const end2 = performance.now();
+  console.log("step2: ", end2 - start2, "msec");
+
+  const start3 = performance.now();
+  Module._free(buffer);
+  const end3 = performance.now();
+  console.log("step3: ", end3 - start3, "msec");
+};
+
+window.Module = {
+  canvas: document.getElementById("canvas"),
+  onRuntimeInitialized: init,
+  print: function(text) { console.log(text); },
+  printErr: function(text) { console.log(text); }
+}
+  </script>
+  <script src="dist/build/cppmain2.js"></script>
+</body>
+
+</html>
